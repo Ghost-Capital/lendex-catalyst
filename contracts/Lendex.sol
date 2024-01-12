@@ -42,8 +42,9 @@ contract FunctionsConsumerExample is IERC721Receiver {
      */
     mapping (address => mapping (uint256 => Info)) tokens;
 
-    error UnexpectedClaimToken(uint256 tokenId);
     error UnexpectedBorrowToken(uint256 tokenId, State status);
+    error UnexpectedPaidTokenDebt(uint256 tokenId);
+    error UnexpectedClaimToken(uint256 tokenId);
 
     struct Info {
         address nftContract;
@@ -64,7 +65,7 @@ contract FunctionsConsumerExample is IERC721Receiver {
      * @notice validate access
      */
     function _validateOwnership() internal view {
-        require(msg.sender == _owner, "Only callable by owner");
+        require(msg.sender == _owner, 'Only callable by owner');
     }
 
     /**
@@ -108,6 +109,19 @@ contract FunctionsConsumerExample is IERC721Receiver {
         }
     }
 
+    function paidTokenDebt(uint256 tokenId) public {
+        address owner = owners[tokenId];
+        require(msg.sender == owner, 'Only token owner can paid token debt');
+        
+        State status = states[tokenId];
+        Info storage info = _getTokenInfo(owner, tokenId);
+        if (status == State.WAITING_PAYMENT && block.timestamp <= info.deadline) {
+            states[tokenId] = State.DEBT_PAID;
+        } else {
+            revert UnexpectedPaidTokenDebt(tokenId);
+        }
+    }
+
     // If we want to make this function cost effective using chainlink functions
     // We can considering make it payable and request an amount equivalent to the LINK cost for calling chainlink plus our fees
     function claimToken(uint256 tokenId) public {  
@@ -128,6 +142,7 @@ contract FunctionsConsumerExample is IERC721Receiver {
         (uint256 deadline, int amount, string memory token) = abi.decode(data, (uint256, int, string));
         require(keccak256(abi.encodePacked(token)) == keccak256(abi.encodePacked('ADA')), 'Only ADA token supported');
         require(amount >= 1_000_000, 'Minimun 1 ADA to be lended');
+        // TODO: uncomment this when ready for production
         // require(deadline >= 86_400, 'Minimum 1 day deadline');
         info.nftContract = _contract;
         info.deadline = block.timestamp + deadline;
