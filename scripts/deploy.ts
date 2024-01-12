@@ -7,7 +7,7 @@ async function main() {
   const currentTimestampInSeconds = Math.round(Date.now() / 1000);
   const unlockTime = currentTimestampInSeconds + 60;
 
-  const lockedAmount = ethers.utils.parseEther("0.001");
+  const lockedAmount = ethers.parseEther("0.001");
 
   // const lock = await ethers.deployContract("Lock", [unlockTime], {
   //   value: lockedAmount,
@@ -27,20 +27,20 @@ async function main() {
   if (!rpcUrl)
     throw new Error(`rpcUrl not provided  - check your environment variables`);
 
-  const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+  const provider = new ethers.JsonRpcProvider(rpcUrl);
 
   const signer = new ethers.Wallet(privateKey, provider);
 
   const { abi: contractAbi, bytecode: contractByteCode } = require("../artifacts/contracts/Lendex.sol/FunctionsConsumerExample.json");
-  const routerAddress = "0x6E2dc0F9DB014aE19888F539E59285D2Ea04244C";
+  // const routerAddress = "0x6E2dc0F9DB014aE19888F539E59285D2Ea04244C";
 
   const factory = new ethers.ContractFactory(contractAbi, contractByteCode, signer);
 
   // If your contract requires constructor args, you can specify them here
-  const contract = await factory.deploy(routerAddress);
+  const contract = await factory.deploy();
 
-  console.log('Contract address:', contract.address);
-  console.log('Contract tx:', contract.deployTransaction);
+  console.log('Contract address:', contract.target);
+  console.log('Contract tx:', contract.deploymentTransaction);
 
   const coin = "MATIC"; // or ETH etc
   // console.log(
