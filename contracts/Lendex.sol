@@ -7,12 +7,15 @@ pragma solidity ^0.8.19;
 import { IERC721 } from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import { IERC721Receiver } from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
+// Remove this on production
+import "hardhat/console.sol";
+
 /**
  * THIS IS AN EXAMPLE CONTRACT THAT USES HARDCODED VALUES FOR CLARITY.
  * THIS IS AN EXAMPLE CONTRACT THAT USES UN-AUDITED CODE.
  * DO NOT USE THIS CODE IN PRODUCTION.
  */
-contract FunctionsConsumerExample is IERC721Receiver {
+contract Lendex is IERC721Receiver {
     bytes32 public s_lastRequestId;
     bytes public s_lastResponse;
     bytes public s_lastError;
@@ -30,24 +33,23 @@ contract FunctionsConsumerExample is IERC721Receiver {
     /**
      * @notice current state of each token
      */
-    mapping (uint256 => State) public states;
+    mapping(address => mapping(uint256 => State)) states;
 
     /**
      * @notice token's owner 
      */
-    mapping (uint256 => address) owners;
+    mapping(address => mapping(uint256 => address)) owners;
 
     /**
      * @notice tokens from each user 
      */
-    mapping (address => mapping (uint256 => Info)) tokens;
+    mapping(address => mapping(address => mapping(uint256 => Info))) tokens;
 
     error UnexpectedBorrowToken(uint256 tokenId, State status);
     error UnexpectedPaidTokenDebt(uint256 tokenId);
     error UnexpectedClaimToken(uint256 tokenId);
 
     struct Info {
-        address nftContract;
         address lender;
         uint256 deadline;
         int amount;
@@ -55,7 +57,8 @@ contract FunctionsConsumerExample is IERC721Receiver {
         string token; // Only ADA for now
     }
 
-    enum State { 
+    enum State {
+        UNKNOWN,
         LOCKED, 
         WAITING_PAYMENT,
         DEBT_PAID
@@ -65,7 +68,7 @@ contract FunctionsConsumerExample is IERC721Receiver {
      * @notice validate access
      */
     function _validateOwnership() internal view {
-        require(msg.sender == _owner, 'Only callable by owner');
+        require(msg.sender == _owner, "Only callable by owner");
     }
 
     /**
@@ -86,37 +89,37 @@ contract FunctionsConsumerExample is IERC721Receiver {
         uint256 tokenId,
         bytes calldata data
     ) external returns (bytes4) {
-        Info storage _info = _getTokenInfo(from, tokenId);
-        require(_info.nftContract == address(0), 'Token already locked');
-
-        tokens[from][tokenId] = _buildTokenInfo(msg.sender, _info, data);
-        states[tokenId] = State.LOCKED;
-        owners[tokenId] = from;
+        address _contract = msg.sender;
+        require(states[_contract][tokenId] == State.UNKNOWN, "Token already in use");
+        
+        tokens[from][_contract][tokenId] = _buildTokenInfo(_getTokenInfo(from, _contract, tokenId), data);
+        states[_contract][tokenId] = State.LOCKED;
+        owners[_contract][tokenId] = from;
 
         return this.onERC721Received.selector;
     }
 
-    function borrowToken(uint256 tokenId, address lender) public onlyOwner {
-        State status = states[tokenId];
+    function borrowToken(address _contract, uint256 tokenId, address lender) public onlyOwner {
+        require(_contract != address(0), "Only owner can borrow");
+
+        State status = states[_contract][tokenId];
         if (status == State.LOCKED) {
-            address owner = owners[tokenId];
-            Info storage info = _getTokenInfo(owner, tokenId);
-            require(info.nftContract != address(0), 'Only owner can borrow');
-            states[tokenId] = State.WAITING_PAYMENT;
-            tokens[owner][tokenId].lender = lender;
+            address owner = owners[_contract][tokenId];
+            states[_contract][tokenId] = State.WAITING_PAYMENT;
+            tokens[owner][_contract][tokenId].lender = lender;
         } else {
             revert UnexpectedBorrowToken(tokenId, status);
         }
     }
 
-    function paidTokenDebt(uint256 tokenId) public {
-        address owner = owners[tokenId];
-        require(msg.sender == owner, 'Only token owner can paid token debt');
+    function payTokenDebt(address _contract, uint256 tokenId) public {
+        address owner = owners[_contract][tokenId];
+        require(msg.sender == owner, "Only token owner can paid token debt");
         
-        State status = states[tokenId];
-        Info storage info = _getTokenInfo(owner, tokenId);
+        State status = states[_contract][tokenId];
+        Info storage info = _getTokenInfo(owner, _contract, tokenId);
         if (status == State.WAITING_PAYMENT && block.timestamp <= info.deadline) {
-            states[tokenId] = State.DEBT_PAID;
+            states[_contract][tokenId] = State.DEBT_PAID;
         } else {
             revert UnexpectedPaidTokenDebt(tokenId);
         }
@@ -124,36 +127,57 @@ contract FunctionsConsumerExample is IERC721Receiver {
 
     // If we want to make this function cost effective using chainlink functions
     // We can considering make it payable and request an amount equivalent to the LINK cost for calling chainlink plus our fees
-    function claimToken(uint256 tokenId) public {  
-        State status = states[tokenId];
-        Info storage info = _getTokenInfo(msg.sender, tokenId);
+    function claimToken(address _contract, uint256 tokenId) public {  
+        require(_contract != address(0), "Only owner can claim token if not borrowed or with debt paid");
+
+        State status = states[_contract][tokenId];
+        address owner = owners[_contract][tokenId];
+        Info storage info = _getTokenInfo(owner, _contract, tokenId);
         if (status == State.LOCKED || status == State.DEBT_PAID) { // token wasn't borrowed or debt have been paid on time
-            require(info.nftContract != address(0), 'Only owner can claim token if not borrowed or with debt paid');
-            _safeTransferFrom(info.nftContract, address(this), msg.sender, tokenId);
+            require(msg.sender == owner, "Only owner can claim token locked or paid");
+
+            _safeTransferFrom(_contract, address(this), owner, tokenId);
+            _deleteToken(_contract, tokenId);
         } else if (status == State.WAITING_PAYMENT && (info.deadline != 0 && block.timestamp > info.deadline)) {
-            require(msg.sender == info.lender);
-            _safeTransferFrom(info.nftContract, address(this), msg.sender, tokenId);
+            require(msg.sender == info.lender, "Only lender can claim token after deadline");
+
+            _safeTransferFrom(_contract, address(this), info.lender, tokenId);
+            _deleteToken(_contract, tokenId);
         } else {
             revert UnexpectedClaimToken(tokenId);
         }
     }
 
-    function _buildTokenInfo(address _contract, Info storage info, bytes calldata data) internal returns (Info storage) {
-        (uint256 deadline, int amount, string memory token) = abi.decode(data, (uint256, int, string));
-        require(keccak256(abi.encodePacked(token)) == keccak256(abi.encodePacked('ADA')), 'Only ADA token supported');
-        require(amount >= 1_000_000, 'Minimun 1 ADA to be lended');
-        // TODO: uncomment this when ready for production
-        // require(deadline >= 86_400, 'Minimum 1 day deadline');
-        info.nftContract = _contract;
+    // *********************** VIEWS *****************************************
+    function getToken(address owner, address _contract, uint256 tokenId) public view returns (Info memory, State) {
+        return (tokens[owner][_contract][tokenId], states[_contract][tokenId]);
+    }
+
+    function getTokenOwner(address _contract, uint256 tokenId) public view returns (address) {
+        return owners[_contract][tokenId];
+    }
+
+    function _deleteToken(address _contract, uint256 tokenId) internal {
+        address owner = owners[_contract][tokenId];
+        delete owners[_contract][tokenId];
+        delete states[_contract][tokenId];
+        delete tokens[owner][_contract][tokenId];
+    }
+
+    function _buildTokenInfo(Info storage info, bytes calldata data) internal returns (Info storage) {
+        (uint256 deadline, int amount, string memory currency) = abi.decode(data, (uint256, int, string));
+        require(keccak256(abi.encodePacked(currency)) == keccak256(abi.encodePacked("ADA")), "Only ADA currency supported");
+        require(amount >= 1_000_000, "Minimun 1 ADA to be lended");
+        require(deadline >= 86_400, "Minimum 1 day deadline");
         info.deadline = block.timestamp + deadline;
         info.amount = amount;
         info.decimals = 1_000_000;
-        info.token = token;
+        info.token = currency;
         return info;
     }
 
-    function _getTokenInfo(address ref, uint256 tokenId) internal view returns (Info storage) {
-        return tokens[ref][tokenId];
+    function _getTokenInfo(address owner, address _contract, uint256 tokenId) internal view returns (Info storage) {
+        return tokens[owner][_contract][tokenId];
     }
 
     function _safeTransferFrom(address _contract, address from, address to, uint256 tokenId) internal {

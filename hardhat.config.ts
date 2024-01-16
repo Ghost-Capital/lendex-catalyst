@@ -15,8 +15,8 @@ const config: HardhatUserConfig = {
     }
   },
   networks: {
-    hardhat: {
-    },
+    // hardhat: {
+    // },
     polygon_mumbai: {
       url: "https://rpc-mumbai.maticvigil.com",
       accounts: [process.env.PRIVATE_KEY!]
@@ -26,7 +26,7 @@ const config: HardhatUserConfig = {
     apiKey: process.env.POLYGONSCAN_API_KEY
   },
 
-  defaultNetwork: 'polygon_mumbai'
+  // defaultNetwork: 'polygon_mumbai'
 };
 
 export default config;

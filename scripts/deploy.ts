@@ -4,10 +4,10 @@ import * as dotenv from "dotenv";
 dotenv.config();
 
 async function main() {
-  const currentTimestampInSeconds = Math.round(Date.now() / 1000);
-  const unlockTime = currentTimestampInSeconds + 60;
+  // const currentTimestampInSeconds = Math.round(Date.now() / 1000);
+  // const unlockTime = currentTimestampInSeconds + 60;
 
-  const lockedAmount = ethers.parseEther("0.001");
+  // const lockedAmount = ethers.parseEther("0.001");
 
   // const lock = await ethers.deployContract("Lock", [unlockTime], {
   //   value: lockedAmount,
@@ -42,7 +42,7 @@ async function main() {
   console.log('Contract address:', contract.target);
   console.log('Contract tx:', contract.deploymentTransaction);
 
-  const coin = "MATIC"; // or ETH etc
+  // const coin = "MATIC"; // or ETH etc
   // console.log(
   //   `Lock with ${ethers.utils.formatEther(
   //     lockedAmount
