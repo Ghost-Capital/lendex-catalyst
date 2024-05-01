@@ -177,7 +177,8 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
         address _contract,
         uint256 tokenId,
         address lender
-    ) public onlyOwner {
+    ) public {
+        require(msg.sender == lender, "Only callable by lender");
         require(_contract != address(0), "Invalid token collection");
 
         State status = states[_contract][tokenId];
@@ -359,12 +360,6 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
         IERC721(_contract).safeTransferFrom(from, to, tokenId, "");
     }
 
-    // constructor(
-    //     address router
-    // ) FunctionsClient(router) ConfirmedOwner(msg.sender) {
-    //     _owner == msg.sender;
-    // }
-
     /**
      * @notice Send a simple request
      * @param source Javascript source code
@@ -438,8 +433,8 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
     }
 
     /**
-     * @notice Store latest result/error
-     * @param requestId The request ID, returned by sendRequest()
+     * @notice Chainlink oracle request callback 
+     * @param requestId The request ID, returned by _sendRequest()
      * @param response Aggregated response from the user code
      * @param err Aggregated error from the user code or from the execution pipeline
      * Either response or error parameter will be set, but never both
@@ -450,7 +445,7 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
         bytes memory err
     ) internal override {
         if (oracleRequests[requestId]._type == OracleRequestType.UNKNOWN) {
-            revert UnexpectedRequestID(requestId);
+            revert UnexpectedRequestID(requestId);  
         }
         // s_lastResponse = response;
         // s_lastError = err;
@@ -475,6 +470,9 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
                 emit Response(requestId, response, err);
             }
 
+        }
+        else {
+            revert UnexpectedRequestID(requestId);  
         }
        
     }
