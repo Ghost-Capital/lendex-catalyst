@@ -1,5 +1,7 @@
 import { ethers } from "hardhat";
 import * as dotenv from "dotenv";
+import fs from 'fs';
+import path from 'path';
 
 dotenv.config();
 
@@ -22,24 +24,27 @@ async function main() {
       "private key not provided - check your environment variables"
     );
 
-  const rpcUrl = process.env.POLYGON_MUMBAI_RPC_URL; // fetch mumbai RPC URL
+  const rpcUrl = process.env.PROVIDER_RPC_URL; // fetch RPC URL
 
   if (!rpcUrl)
     throw new Error(`rpcUrl not provided  - check your environment variables`);
 
-  const provider = new ethers.JsonRpcProvider(rpcUrl);
+  const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
 
   const signer = new ethers.Wallet(privateKey, provider);
 
-  const { abi: contractAbi, bytecode: contractByteCode } = require("../artifacts/contracts/Lendex.sol/FunctionsConsumerExample.json");
-  // const routerAddress = "0x6E2dc0F9DB014aE19888F539E59285D2Ea04244C";
-
+  const { abi: contractAbi, bytecode: contractByteCode } = require("../artifacts/contracts/Lendex.sol/Lendex.json");
   const factory = new ethers.ContractFactory(contractAbi, contractByteCode, signer);
 
-  // If your contract requires constructor args, you can specify them here
-  const contract = await factory.deploy();
+  // Contract params
+  const routerAddress = process.env.CHAINLINK_FUNCTIONS_ROUTER;
+  const source = fs.readFileSync(path.resolve(__dirname, "source.js")).toString('utf-8');
+  const contractAddress = process.env.CARDANO_CONTRACT_ADDRESS;
 
-  console.log('Contract address:', contract.target);
+  // If your contract requires constructor args, you can specify them here
+  const contract = await factory.deploy(routerAddress, source, contractAddress);
+
+  console.log('Contract address:', (contract.target || contract.address));
   console.log('Contract tx:', contract.deploymentTransaction);
 
   // const coin = "MATIC"; // or ETH etc

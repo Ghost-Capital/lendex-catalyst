@@ -1,0 +1,14 @@
+name = "lendex/lendex"
+version = "0.0.0"
+license = "Apache-2.0"
+description = "Aiken contracts for project 'lendex'"
+
+[repository]
+user = "lendex"
+project = "lendex"
+platform = "github"
+
+[[dependencies]]
+name = "aiken-lang/stdlib"
+version = "1.7.0"
+source = "github"

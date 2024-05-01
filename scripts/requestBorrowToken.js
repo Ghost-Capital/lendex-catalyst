@@ -11,29 +11,36 @@ const {
   deleteGist,
   FulfillmentCode,
 } = require("@chainlink/functions-toolkit");
-const { abi: functionsConsumerAbi } = require("../artifacts/contracts/Lendex.sol/FunctionsConsumerExample.json");
+const { abi: functionsConsumerAbi } = require("../artifacts/contracts/Lendex.sol/Lendex.json");
 const ethers = require("ethers");
 // require("@chainlink/env-enc").config();
 require('dotenv').config();
 
-// const consumerAddress = "0xEb0fe0164d12b238A107D26775E7c3aA7844262E"; // REPLACE this with your Functions consumer address
-const consumerAddress = "0x323aE6D3376c0255d2Cdb05e8cB9fdC6FFf1cd72"; // REPLACE this with your Functions consumer address
-const subscriptionId = 1258; // your Chain-Link functions subscription ID
+const data = ethers.utils.defaultAbiCoder.decode(
+  ["string", "int"], "0x0000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000f5792d4f00000000000000000000000000000000000000000000000000000000000000003a36303364636537383434663336623233623863336639306166626134306161313838653766316433663665386163643164353434656431646139000000000000");
 
-const makeRequestMumbai = async () => {
-  // hardcoded for Polygon Mumbai
-  const routerAddress = "0x6E2dc0F9DB014aE19888F539E59285D2Ea04244C";
-  const linkTokenAddress = "0x326C977E6efc84E512bB9C30f76E30c160eD06FB";
-  const donId = "fun-polygon-mumbai-1";
-  const explorerUrl = "https://mumbai.polygonscan.com";
+const consumerAddress = process.env.CHAINLINK_CONSUMER_ADDRESS; // REPLACE this with your Functions consumer address
+const subscriptionId = 2394; // your Chain-Link functions subscription ID
+
+const makeOracleRequest = async () => {
+  const routerAddress = process.env.CHAINLINK_FUNCTIONS_ROUTER;
+  const linkTokenAddress = process.env.CHAINLINK_TOKEN_ADDRESS;
+  const cardanoContractAddress = process.env.CARDANO_CONTRACT_ADDRESS;
+  const donId = "fun-ethereum-sepolia-1";
+  const explorerUrl = "https://sepolia.etherscan.io";
+  const token = "7225bcf3a111bc2b9e5ab9b270f237cd24ff06ef488cb9381ffda8f9536f756c626f756e645465737423303031";
 
   // Initialize functions settings
   const source = fs
     .readFileSync(path.resolve(__dirname, "source.js"))
     .toString();
+  
+  const policyId = "7225bcf3a111bc2b9e5ab9b270f237cd24ff06ef488cb9381ffda8f9";
+  const tokenId = "1"
 
-  const args = ["1", "USD"];
-  const secrets = { apiKey: process.env.BLOCKFROST_API_KEY };
+  // const args = ["1", "USD"];
+  const args = ["borrow_check", policyId, tokenId];
+  const secrets = { apiKey: process.env.BLOCKFROST_API_KEY, apiUrl: process.env.BLOCKFROST_BLOCKCHAIN_URL, contractAddress: cardanoContractAddress  };
   const gasLimit = 300000;
 
   // Initialize ethers signer and provider to interact with the contracts onchain
@@ -43,7 +50,7 @@ const makeRequestMumbai = async () => {
       "private key not provided - check your environment variables"
     );
 
-  const rpcUrl = process.env.POLYGON_MUMBAI_RPC_URL; // fetch mumbai RPC URL
+  const rpcUrl = process.env.PROVIDER_RPC_URL; // fetch mumbai RPC URL
 
   if (!rpcUrl)
     throw new Error(`rpcUrl not provided  - check your environment variables`);
@@ -69,7 +76,7 @@ const makeRequestMumbai = async () => {
   if (errorString) {
     console.log(`❌ Error during simulation: `, errorString);
   } else {
-    const returnType = ReturnType.uint256;
+    const returnType = ReturnType.bytes;
     const responseBytesHexstring = response.responseBytesHexstring;
     if (ethers.utils.arrayify(responseBytesHexstring).length > 0) {
       const decodedResponse = decodeResult(
@@ -123,22 +130,46 @@ const makeRequestMumbai = async () => {
   // Encrypt secrets
   const encryptedSecretsObj = await secretsManager.encryptSecrets(secrets);
 
-  console.log(`Creating gist...`);
-  const githubApiToken = process.env.GITHUB_API_TOKEN;
-  if (!githubApiToken)
-    throw new Error(
-      "githubApiToken not provided - check your environment variables"
-    );
-
-  // Create a new GitHub Gist to store the encrypted secrets
-  const gistURL = await createGist(
-    githubApiToken,
-    JSON.stringify(encryptedSecretsObj)
+  // Upload secrets
+  const gatewayUrls = JSON.parse(process.env.CHAINLINK_ENCRYPTED_SECRETS_UPLOAD_ENDPOINTS);
+  const slotIdNumber = 0; // slot ID where to upload the secrets
+  const expirationTimeMinutes = 15; // expiration time in minutes of the secrets
+  console.log(
+    `Upload encrypted secret to gateways ${gatewayUrls}. slotId ${slotIdNumber}. Expiration in minutes: ${expirationTimeMinutes}`
   );
-  console.log(`\n✅Gist created ${gistURL} . Encrypt the URLs..`);
-  const encryptedSecretsUrls = await secretsManager.encryptSecretsUrls([
-    gistURL,
-  ]);
+  const uploadResult = await secretsManager.uploadEncryptedSecretsToDON({
+    encryptedSecretsHexstring: encryptedSecretsObj.encryptedSecrets,
+    gatewayUrls: gatewayUrls,
+    slotId: slotIdNumber,
+    minutesUntilExpiration: expirationTimeMinutes,
+  });
+
+  if (!uploadResult.success)
+    throw new Error(`Encrypted secrets not uploaded to ${gatewayUrls}`);
+
+  console.log(
+    `\n✅ Secrets uploaded properly to gateways ${gatewayUrls}! Gateways response: `,
+    uploadResult
+  );
+
+  const donHostedSecretsVersion = parseInt(uploadResult.version); // fetch the reference of the encrypted secrets
+
+  // console.log(`Creating gist...`);
+  // const githubApiToken = process.env.GITHUB_API_TOKEN;
+  // if (!githubApiToken)
+  //   throw new Error(
+  //     "githubApiToken not provided - check your environment variables"
+  //   );
+
+  // // Create a new GitHub Gist to store the encrypted secrets
+  // const gistURL = await createGist(
+  //   githubApiToken,
+  //   JSON.stringify(encryptedSecretsObj)
+  // );
+  // console.log(`\n✅Gist created ${gistURL} . Encrypt the URLs..`);
+  // const encryptedSecretsUrls = await secretsManager.encryptSecretsUrls([
+  //   gistURL,
+  // ]);
 
   const functionsConsumer = new ethers.Contract(
     consumerAddress,
@@ -149,12 +180,15 @@ const makeRequestMumbai = async () => {
   // Actual transaction call
   const transaction = await functionsConsumer.sendRequest(
     source, // source
-    encryptedSecretsUrls, // Encrypted Urls where the DON can fetch the encrypted secrets
-    0, // don hosted secrets - slot ID - empty in this example
-    0, // don hosted secrets - version - empty in this example
-    args,
-    [], // bytesArgs - arguments can be encoded off-chain to bytes.
     subscriptionId,
+    // encryptedSecretsUrls, // Encrypted Urls where the DON can fetch the encrypted secrets
+    // 0, // don hosted secrets - slot ID - empty in this example
+    // 0, // don hosted secrets - version - empty in this example
+    "0x", // user hosted secrets - encryptedSecretsUrls - empty in this example
+    slotIdNumber, // slot ID of the encrypted secrets
+    donHostedSecretsVersion, // version of the encrypted secrets
+    args, // args
+    [], // bytesArgs - arguments can be encoded off-chain to bytes.
     gasLimit,
     ethers.utils.formatBytes32String(donId) // jobId is bytes32 representation of donId
   );
@@ -224,16 +258,18 @@ const makeRequestMumbai = async () => {
         if (ethers.utils.arrayify(responseBytesHexstring).length > 0) {
           const decodedResponse = decodeResult(
             response.responseBytesHexstring,
-            ReturnType.uint256
+            ReturnType.bytes
           );
           console.log(
-            `\n✅ Decoded response to ${ReturnType.uint256}: `,
-            decodedResponse
+            `\n✅ Response to `, ethers.utils.defaultAbiCoder.decode(
+              ["string", "int"],
+            decodedResponse)
           );
+
           // Delete gistURL - not needed anymore
-          console.log(`Delete gistUrl ${gistURL}`);
-          await deleteGist(githubApiToken, gistURL);
-          console.log(`\n✅ Gist ${gistURL} deleted`);
+          // console.log(`Delete gistUrl ${gistURL}`);
+          // await deleteGist(githubApiToken, gistURL);
+          // console.log(`\n✅ Gist ${gistURL} deleted`);
         }
       }
     } catch (error) {
@@ -242,7 +278,7 @@ const makeRequestMumbai = async () => {
   })();
 };
 
-makeRequestMumbai().catch((e) => {
+makeOracleRequest().catch((e) => {
   console.error(e);
   process.exit(1);
 });

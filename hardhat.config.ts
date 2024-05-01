@@ -17,16 +17,16 @@ const config: HardhatUserConfig = {
   networks: {
     // hardhat: {
     // },
-    polygon_mumbai: {
-      url: "https://rpc-mumbai.maticvigil.com",
+    sepolia: {
+      url: process.env.PROVIDER_RPC_URL,
       accounts: [process.env.PRIVATE_KEY!]
     }
   },
   etherscan: {
-    apiKey: process.env.POLYGONSCAN_API_KEY
+    apiKey: process.env.PROVIDER_API_KEY
   },
 
-  // defaultNetwork: 'polygon_mumbai'
+  defaultNetwork: 'sepolia'
 };
 
 export default config;
