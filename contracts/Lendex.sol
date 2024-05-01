@@ -64,7 +64,7 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
     mapping (bytes32 => OracleRequest) oracleRequests;
 
     error UnexpectedBorrowToken(uint256 tokenId, State status);
-    error UnexpectedPaidTokenDebt(uint256 tokenId);
+    error UnexpectedPaidTokenDebt(uint256 tokenId, State status);
     error UnexpectedClaimToken(uint256 tokenId);
 
     struct Info {
@@ -75,6 +75,7 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
         string token; // Only ADA for now
         uint256 refToken; // token from Cardano to track other side status
         string borrowerAddr; // Cardano address to send the requested amount of token (Only ADA for now)
+        string lenderAddr; // Cardano address to pay the debt for the token (Only ADA for now)
     }
 
     enum State {
@@ -97,6 +98,7 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
         address _contract;
         uint256 tokenId;
         address lender;
+        string lenderAddr;
     }
 
     struct RequestConfig {
@@ -173,21 +175,23 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
         return this.onERC721Received.selector;
     }
 
+    // If we want to make this function cost effective using chainlink functions
+    // We should consider make it payable and request an amount equivalent to the LINK cost for calling chainlink plus our fees
     function borrowToken(
         address _contract,
         uint256 tokenId,
-        address lender
+        string memory lenderAddr
     ) public {
-        require(msg.sender == lender, "Only callable by lender");
         require(_contract != address(0), "Invalid token collection");
+        address owner = owners[_contract][tokenId];
+        Info memory info = tokens[owner][_contract][tokenId];
+        require(info.lender == address(0), "There is a lender for this token already");
+        address lender = msg.sender; // sender is the lender
 
         State status = states[_contract][tokenId];
         if (status == State.LOCKED) {
-            address owner = owners[_contract][tokenId];
-            string[] memory args = new string[](2);
-            args[0] = "borrow_check";
-            args[1] = tokens[owner][_contract][tokenId].refToken.toString();
-            uint32 gasLimit = 300000;
+            uint256 refToken = info.refToken;
+            (string[] memory args, uint32 gasLimit) = _buildOracleRequestParams(refToken, "borrow_check");
             bytes32 requestId = _sendOracleRequest(
                 _source, 
                 _subscriptionId, 
@@ -203,6 +207,7 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
             oracleRequest._contract = _contract;
             oracleRequest.tokenId = tokenId;
             oracleRequest.lender = lender;
+            oracleRequest.lenderAddr = lenderAddr;
 
             oracleRequests[requestId] = oracleRequest;
 
@@ -214,23 +219,53 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
         }
     }
 
+    function _buildOracleRequestParams(
+        uint256 refToken,
+        string memory action
+        ) internal pure returns (string[] memory, uint32) {
+            string[] memory args = new string[](2);
+            args[0] = action;
+            args[1] = refToken.toString();
+            uint32 gasLimit = 300000;
+            return (args, gasLimit);
+    }
+
+    // If we want to make this function cost effective using chainlink functions
+    // We should consider make it payable and request an amount equivalent to the LINK cost for calling chainlink plus our fees
     function payTokenDebt(address _contract, uint256 tokenId) public {
         address owner = owners[_contract][tokenId];
-        require(msg.sender == owner, "Only token owner can paid token debt");
+        require(msg.sender == owner, "Only token owner (borrower) can paid token debt");
 
         State status = states[_contract][tokenId];
         Info storage info = _getTokenInfo(owner, _contract, tokenId);
         if (
             status == State.WAITING_PAYMENT && block.timestamp <= info.deadline
         ) {
-            states[_contract][tokenId] = State.DEBT_PAID;
+            uint256 refToken = tokens[owner][_contract][tokenId].refToken;
+            (string[] memory args, uint32 gasLimit) = _buildOracleRequestParams(refToken, "pay_debt_check");
+            bytes32 requestId = _sendOracleRequest(
+                _source, 
+                _subscriptionId, 
+                _encryptedSecretsUrls, 
+                _donHostedSecretsSlotID, 
+                _donHostedSecretsVersion,
+                args, 
+                gasLimit, 
+                _donID
+            );
+            OracleRequest memory oracleRequest;
+            oracleRequest._type = OracleRequestType.PAY_DEBT_CHECK;
+            oracleRequest._contract = _contract;
+            oracleRequest.tokenId = tokenId;
+
+            oracleRequests[requestId] = oracleRequest;
+
+            // states[_contract][tokenId] = State.DEBT_PAID;
         } else {
-            revert UnexpectedPaidTokenDebt(tokenId);
+            revert UnexpectedPaidTokenDebt(tokenId, status);
         }
     }
 
-    // If we want to make this function cost effective using chainlink functions
-    // We should consider make it payable and request an amount equivalent to the LINK cost for calling chainlink plus our fees
     function claimToken(address _contract, uint256 tokenId) public {
         require(
             _contract != address(0),
@@ -276,9 +311,9 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
         Info storage info,
         bytes calldata data
     ) internal returns (Info storage) {
-        (uint256 deadline, int amount, string memory currency) = abi.decode(
+        (string memory borrowerAddr, uint256 deadline, int amount, string memory currency) = abi.decode(
             data,
-            (uint256, int, string)
+            (string, uint256, int, string)
         );
         require(
             stringEquals(currency, "ADA"),
@@ -291,6 +326,7 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
         info.decimals = 1_000_000;
         info.token = currency;
         info.refToken = tokenCount;
+        info.borrowerAddr = borrowerAddr;
         return info;
     }
 
@@ -450,6 +486,30 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
         // s_lastResponse = response;
         // s_lastError = err;
         else if (oracleRequests[requestId]._type == OracleRequestType.BORROW_CHECK) {
+            (string memory lender, int debt) = abi.decode(
+                response,
+                (string, int)
+            );
+            console.log("Cardano response lender: %o", lender);
+            console.log("Cardano response debt: %o", uint256(debt));
+
+            address _lender = oracleRequests[requestId].lender;
+            string memory _lenderAddr = oracleRequests[requestId].lenderAddr;
+            address _contract = oracleRequests[requestId]._contract;
+            uint256 tokenId = oracleRequests[requestId].tokenId;
+
+            address owner = owners[_contract][tokenId];
+            Info memory info = tokens[owner][_contract][tokenId];
+
+            if (stringEquals(_lenderAddr, lender) && info.amount == debt) {
+                states[_contract][tokenId] = State.WAITING_PAYMENT;
+                info.lender = _lender;
+                info.lenderAddr = _lenderAddr;
+                emit Response(requestId, response, err);
+            }
+
+        }
+        else if (oracleRequests[requestId]._type == OracleRequestType.PAY_DEBT_CHECK) {
             (string memory borrower, int debt) = abi.decode(
                 response,
                 (string, int)
@@ -457,19 +517,16 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
             console.log("Cardano response borrower: %o", borrower);
             console.log("Cardano response debt: %o", uint256(debt));
 
-            address _lender = oracleRequests[requestId].lender;
             address _contract = oracleRequests[requestId]._contract;
             uint256 tokenId = oracleRequests[requestId].tokenId;
 
             address owner = owners[_contract][tokenId];
             Info memory info = tokens[owner][_contract][tokenId];
 
-            if (stringEquals(info.borrowerAddr, borrower) && info.amount == debt) {
-                states[_contract][tokenId] = State.WAITING_PAYMENT;
-                info.lender = _lender;
+            if (stringEquals(info.borrowerAddr, borrower) && debt == 0) {
+                states[_contract][tokenId] = State.DEBT_PAID;
                 emit Response(requestId, response, err);
             }
-
         }
         else {
             revert UnexpectedRequestID(requestId);  
