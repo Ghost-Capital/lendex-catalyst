@@ -28,14 +28,13 @@ const makeOracleRequest = async () => {
   const cardanoContractAddress = process.env.CARDANO_CONTRACT_ADDRESS;
   const donId = "fun-ethereum-sepolia-1";
   const explorerUrl = "https://sepolia.etherscan.io";
-  const token = "7225bcf3a111bc2b9e5ab9b270f237cd24ff06ef488cb9381ffda8f9536f756c626f756e645465737423303031";
 
   // Initialize functions settings
   const source = fs
     .readFileSync(path.resolve(__dirname, "source.js"))
     .toString();
   
-  const policyId = "7225bcf3a111bc2b9e5ab9b270f237cd24ff06ef488cb9381ffda8f9";
+  const policyId = "eef2d298b856d433d01b83b5b2a4318767845589bee6fecc890c8655";
   const tokenId = "1"
 
   // const args = ["1", "USD"];

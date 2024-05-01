@@ -147,7 +147,7 @@ async function borrowCheck() {
     }
     
     // TODO: make sure tokens datum uses the same pattern this hardcoded data: [lender, borrower, debt]
-    const decodedData = decode(new Uint8Array(hexToBuffer("D87983581D603DCE7844F36B23B8C3F90AFBA40AA188E7F1D3F6E8ACD1D544ED1DA9581D603AFA0EC5EB5349B65248E1700844C01C0698355D2A1F1917DCFC977B1B000000F5792D4F00")));
+    const decodedData = decode(new Uint8Array(hexToBuffer(inline_datum)));
     
     // const result = JSON.stringify({address, data}, replacer, 2);
     const data = convertCBORData(decodedData);

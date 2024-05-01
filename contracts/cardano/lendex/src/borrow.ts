@@ -42,7 +42,7 @@ console.log('Script Address:', lockAddress);
 const utxo = utxos[0];
 
 const lovelace = 1_000_000;
-const tokenName = 'Lendex#001';
+const tokenName = 'Lendex#1';
 const assetName = `${policyId}${fromText(tokenName)}`;
 
 // const mintRedeemer = Data.to(new Constr(0, [msg]));

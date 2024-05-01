@@ -46,7 +46,7 @@ const utxo = utxos[0];
 const fee = 1/2
 
 const amount = BigInt(Math.ceil(1_000_000 + (1_000_000 * fee)));
-const tokenName = 'Lendex#001';
+const tokenName = 'Lendex#1';
 const assetName = `${policyId}${fromText(tokenName)}`;
 
 const minter: RedeemerData = "Pay";
