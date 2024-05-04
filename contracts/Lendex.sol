@@ -20,18 +20,9 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
     using FunctionsRequest for FunctionsRequest.Request;
     using Strings for uint256;
 
-    bytes32 public s_lastRequestId;
-    bytes public s_lastResponse;
-    bytes public s_lastError;
-
     error UnexpectedRequestID(bytes32 requestId);
 
     event Response(bytes32 indexed requestId, bytes response, bytes err);
-
-    /**
-     * @notice who mint the smart contract. For now we'll prevent some actions to only be executed by this address e.g claiming tokens
-     */
-    address _owner;
 
     /**
      * @notice current state of each token
@@ -49,15 +40,9 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
     mapping(address => mapping(address => mapping(uint256 => Info))) tokens;
 
     // JavaScript source code
-    string _source;
+    bytes32 _sourceHash;
     uint64 _subscriptionId;
-    bytes _encryptedSecretsUrls;
-    uint8 _donHostedSecretsSlotID;
-    uint64 _donHostedSecretsVersion;
     bytes32 _donID;
-
-    // Cardano SC address
-    string _contractAddress;
 
     uint256 tokenCount;
 
@@ -66,6 +51,11 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
     error UnexpectedBorrowToken(uint256 tokenId, State status);
     error UnexpectedPaidTokenDebt(uint256 tokenId, State status);
     error UnexpectedClaimToken(uint256 tokenId);
+
+    struct Fee {
+        int n;
+        int d;
+    }
 
     struct Info {
         address lender; // who accept the exchange
@@ -76,6 +66,7 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
         uint256 refToken; // token from Cardano to track other side status
         string borrowerAddr; // Cardano address to send the requested amount of token (Only ADA for now)
         string lenderAddr; // Cardano address to pay the debt for the token (Only ADA for now)
+        Fee fee;
     }
 
     enum State {
@@ -104,7 +95,6 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
     struct RequestConfig {
         string source;
         uint64 subscriptionId;
-        bytes encryptedSecretsUrls;
         uint8 donHostedSecretsSlotID;
         uint64 donHostedSecretsVersion;
         string[] args;
@@ -113,39 +103,15 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
         bytes32 donID;
     }
 
-    // /**
-    //  * @notice validate access
-    //  */
-    // function _validateOwnership() internal view {
-    //     require(msg.sender == _owner, "Only callable by owner");
-    // }
-
-    // /**
-    //  * @notice Reverts if called by anyone other than the contract owner.
-    //  */
-    // modifier onlyOwner() {
-    //     _validateOwnership();
-    //     _;
-    // }
-
     constructor(
-        address router, 
-        string memory source, 
+        address router,
+        bytes32 sourceHash, 
         uint64 subscriptionId,
-        bytes memory encryptedSecretsUrls,
-        uint8 donHostedSecretsSlotID,
-        uint64 donHostedSecretsVersion,
-        bytes32 donID,
-        string memory contractAddress
+        bytes32 donID
         ) FunctionsClient(router) ConfirmedOwner(msg.sender) {
-        _owner = msg.sender;
-        _source = source;
+        _sourceHash = sourceHash;
         _subscriptionId = subscriptionId;
-        _encryptedSecretsUrls = encryptedSecretsUrls;
-        _donHostedSecretsSlotID = donHostedSecretsSlotID;
-        _donHostedSecretsVersion = donHostedSecretsVersion;
         _donID = donID;
-        _contractAddress = contractAddress;
         tokenCount = 0;
     }
 
@@ -178,9 +144,12 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
     // If we want to make this function cost effective using chainlink functions
     // We should consider make it payable and request an amount equivalent to the LINK cost for calling chainlink plus our fees
     function borrowToken(
+        string memory source,
         address _contract,
         uint256 tokenId,
-        string memory lenderAddr
+        string memory lenderAddr,
+        uint8 donHostedSecretsSlotID,
+        uint64 donHostedSecretsVersion
     ) public {
         require(_contract != address(0), "Invalid token collection");
         address owner = owners[_contract][tokenId];
@@ -193,11 +162,10 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
             uint256 refToken = info.refToken;
             (string[] memory args, uint32 gasLimit) = _buildOracleRequestParams(refToken, "borrow_check");
             bytes32 requestId = _sendOracleRequest(
-                _source, 
+                source, 
                 _subscriptionId, 
-                _encryptedSecretsUrls, 
-                _donHostedSecretsSlotID, 
-                _donHostedSecretsVersion,
+                donHostedSecretsSlotID, 
+                donHostedSecretsVersion,
                 args, 
                 gasLimit, 
                 _donID
@@ -232,7 +200,13 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
 
     // If we want to make this function cost effective using chainlink functions
     // We should consider make it payable and request an amount equivalent to the LINK cost for calling chainlink plus our fees
-    function payTokenDebt(address _contract, uint256 tokenId) public {
+    function payTokenDebt(
+        string memory source,
+        address _contract, 
+        uint256 tokenId, 
+        uint8 donHostedSecretsSlotID,
+        uint64 donHostedSecretsVersion
+    ) public {
         address owner = owners[_contract][tokenId];
         require(msg.sender == owner, "Only token owner (borrower) can paid token debt");
 
@@ -244,11 +218,10 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
             uint256 refToken = tokens[owner][_contract][tokenId].refToken;
             (string[] memory args, uint32 gasLimit) = _buildOracleRequestParams(refToken, "pay_debt_check");
             bytes32 requestId = _sendOracleRequest(
-                _source, 
+                source, 
                 _subscriptionId, 
-                _encryptedSecretsUrls, 
-                _donHostedSecretsSlotID, 
-                _donHostedSecretsVersion,
+                donHostedSecretsSlotID, 
+                donHostedSecretsVersion,
                 args, 
                 gasLimit, 
                 _donID
@@ -269,7 +242,7 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
     function claimToken(address _contract, uint256 tokenId) public {
         require(
             _contract != address(0),
-            "Only owner can claim token if not borrowed or with debt paid"
+            "Invalid token collection"
         );
 
         State status = states[_contract][tokenId];
@@ -311,9 +284,9 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
         Info storage info,
         bytes calldata data
     ) internal returns (Info storage) {
-        (string memory borrowerAddr, uint256 deadline, int amount, string memory currency) = abi.decode(
+        (string memory borrowerAddr, uint256 deadline, int amount, string memory currency, int fee_n, int fee_d) = abi.decode(
             data,
-            (string, uint256, int, string)
+            (string, uint256, int, string, int, int)
         );
         require(
             stringEquals(currency, "ADA"),
@@ -327,6 +300,7 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
         info.token = currency;
         info.refToken = tokenCount;
         info.borrowerAddr = borrowerAddr;
+        info.fee = Fee({ n: fee_n, d: fee_d });
         return info;
     }
 
@@ -346,12 +320,20 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
         return owners[_contract][tokenId];
     }
 
-    function getContractAddress() public view returns (string memory) {
-        return _contractAddress;   
+    function getSourceHash() public view returns (bytes32) {
+        return _sourceHash;   
     }
 
-    function getSourceCode() public view returns (string memory) {
-        return _source;   
+    function getSusbcriptionId() public view returns (uint64) {
+        return _subscriptionId;
+    } 
+
+    function getDonId() public view returns (bytes32) {
+        return _donID;
+    }
+
+    function getTokenCount() public view returns (uint256) {
+        return tokenCount;
     }
 
     function _getTokenInfo(
@@ -385,6 +367,10 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
         return (keccak256(abi.encodePacked((a))) == keccak256(abi.encodePacked((b))));
     }
 
+    function validSource(string memory source) public view returns (bool) {
+        return keccak256(abi.encodePacked(source)) == _sourceHash;
+    }
+
     // *********************** ENDS VIEWS *****************************************
 
     function _safeTransferFrom(
@@ -399,7 +385,6 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
     /**
      * @notice Send a simple request
      * @param source Javascript source code
-     * @param encryptedSecretsUrls Encrypted URLs where to fetch user secrets
      * @param donHostedSecretsSlotID Don hosted secrets slotId
      * @param donHostedSecretsVersion Don hosted secrets version
      * @param args List of arguments accessible from within the source code
@@ -408,7 +393,6 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
     function _sendOracleRequest(
         string memory source,
         uint64 subscriptionId,
-        bytes memory encryptedSecretsUrls,
         uint8 donHostedSecretsSlotID,
         uint64 donHostedSecretsVersion,
         string[] memory args,
@@ -422,9 +406,9 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
 
         FunctionsRequest.Request memory req;
         req.initializeRequestForInlineJavaScript(source);
-        if (encryptedSecretsUrls.length > 0)
-            req.addSecretsReference(encryptedSecretsUrls);
-        else if (donHostedSecretsVersion > 0) {
+        // if (encryptedSecretsUrls.length > 0)
+        //     req.addSecretsReference(encryptedSecretsUrls);
+        if (donHostedSecretsVersion > 0) {
             req.addDONHostedSecrets(
                 donHostedSecretsSlotID,
                 donHostedSecretsVersion
@@ -480,56 +464,58 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
         bytes memory response,
         bytes memory err
     ) internal override {
-        if (oracleRequests[requestId]._type == OracleRequestType.UNKNOWN) {
+        OracleRequest memory request = oracleRequests[requestId];
+        if (request._type == OracleRequestType.UNKNOWN) {
             revert UnexpectedRequestID(requestId);  
-        }
-        // s_lastResponse = response;
-        // s_lastError = err;
-        else if (oracleRequests[requestId]._type == OracleRequestType.BORROW_CHECK) {
-            (string memory lender, int debt) = abi.decode(
-                response,
-                (string, int)
-            );
-            console.log("Cardano response lender: %o", lender);
-            console.log("Cardano response debt: %o", uint256(debt));
-
-            address _lender = oracleRequests[requestId].lender;
-            string memory _lenderAddr = oracleRequests[requestId].lenderAddr;
-            address _contract = oracleRequests[requestId]._contract;
-            uint256 tokenId = oracleRequests[requestId].tokenId;
-
-            address owner = owners[_contract][tokenId];
-            Info memory info = tokens[owner][_contract][tokenId];
-
-            if (stringEquals(_lenderAddr, lender) && info.amount == debt) {
-                states[_contract][tokenId] = State.WAITING_PAYMENT;
-                info.lender = _lender;
-                info.lenderAddr = _lenderAddr;
-                emit Response(requestId, response, err);
-            }
-
-        }
-        else if (oracleRequests[requestId]._type == OracleRequestType.PAY_DEBT_CHECK) {
-            (string memory borrower, int debt) = abi.decode(
-                response,
-                (string, int)
-            );
-            console.log("Cardano response borrower: %o", borrower);
-            console.log("Cardano response debt: %o", uint256(debt));
-
-            address _contract = oracleRequests[requestId]._contract;
-            uint256 tokenId = oracleRequests[requestId].tokenId;
-
-            address owner = owners[_contract][tokenId];
-            Info memory info = tokens[owner][_contract][tokenId];
-
-            if (stringEquals(info.borrowerAddr, borrower) && debt == 0) {
-                states[_contract][tokenId] = State.DEBT_PAID;
-                emit Response(requestId, response, err);
-            }
         }
         else {
-            revert UnexpectedRequestID(requestId);  
+            if (request._type == OracleRequestType.BORROW_CHECK) {
+                (string memory borrower, int loan, int fee_n, int fee_d) = abi.decode(
+                    response,
+                    (string, int, int, int)
+                );
+                console.log("Cardano response borrower: %o", borrower);
+                console.log("Cardano response loan: %o", uint256(loan));
+
+                
+                address _contract = request._contract;
+                uint256 tokenId = request.tokenId;
+
+                address owner = owners[_contract][tokenId];
+                Info memory info = tokens[owner][_contract][tokenId];
+
+                if (stringEquals(info.borrowerAddr, borrower) && info.amount == loan && info.fee.n == fee_n && info.fee.d == fee_d) {
+                    states[_contract][tokenId] = State.WAITING_PAYMENT;
+                    tokens[owner][_contract][tokenId].lender = request.lender;
+                    tokens[owner][_contract][tokenId].lenderAddr = request.lenderAddr;
+                    emit Response(requestId, response, err);
+                }
+                delete oracleRequests[requestId];
+            }
+            else if (request._type == OracleRequestType.PAY_DEBT_CHECK) {
+                (string memory lender, int debt) = abi.decode(
+                    response,
+                    (string, int)
+                );
+                console.log("Cardano response lender: %o", lender);
+                console.log("Cardano response debt: %o", uint256(debt));
+
+                address _contract = request._contract;
+                uint256 tokenId = request.tokenId;
+
+                address owner = owners[_contract][tokenId];
+                Info memory info = tokens[owner][_contract][tokenId];
+
+                if (stringEquals(info.lenderAddr, lender) && debt == 0) {
+                    states[_contract][tokenId] = State.DEBT_PAID;
+                    emit Response(requestId, response, err);
+                }
+                delete oracleRequests[requestId];
+            }
+            else {
+                delete oracleRequests[requestId];
+                revert UnexpectedRequestID(requestId);  
+            }
         }
        
     }

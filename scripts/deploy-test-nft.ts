@@ -6,17 +6,6 @@ import path from 'path';
 dotenv.config();
 
 async function main() {
-  // const currentTimestampInSeconds = Math.round(Date.now() / 1000);
-  // const unlockTime = currentTimestampInSeconds + 60;
-
-  // const lockedAmount = ethers.parseEther("0.001");
-
-  // const lock = await ethers.deployContract("Lock", [unlockTime], {
-  //   value: lockedAmount,
-  // });
-
-  // await lock.waitForDeployment();
-
   // Initialize ethers signer and provider to interact with the contracts onchain
   const privateKey = process.env.PRIVATE_KEY; // fetch PRIVATE_KEY
   if (!privateKey)
@@ -33,26 +22,14 @@ async function main() {
 
   const signer = new ethers.Wallet(privateKey, provider);
 
-  const { abi: contractAbi, bytecode: contractByteCode } = require("../artifacts/contracts/Lendex.sol/Lendex.json");
+  const { abi: contractAbi, bytecode: contractByteCode } = require("../artifacts/contracts/NFT.sol/NFT.json");
   const factory = new ethers.ContractFactory(contractAbi, contractByteCode, signer);
 
-  // Contract params
-  const routerAddress = process.env.CHAINLINK_FUNCTIONS_ROUTER;
-  const source = fs.readFileSync(path.resolve(__dirname, "source.js")).toString('utf-8');
-  const contractAddress = process.env.CARDANO_CONTRACT_ADDRESS;
-
   // If your contract requires constructor args, you can specify them here
-  const contract = await factory.deploy(routerAddress, source, contractAddress);
+  const contract = await factory.deploy();
 
   console.log('Contract address:', (contract.target || contract.address));
-  console.log('Contract tx:', contract.deploymentTransaction);
-
-  // const coin = "MATIC"; // or ETH etc
-  // console.log(
-  //   `Lock with ${ethers.utils.formatEther(
-  //     lockedAmount
-  //   )}${coin} and unlock timestamp ${unlockTime} deployed to ${lock.target}`
-  // );
+  console.log('Contract tx:', contract.deployTransaction);
 }
 
 // We recommend this pattern to be able to use async/await everywhere

@@ -16,17 +16,15 @@ const ethers = require("ethers");
 // require("@chainlink/env-enc").config();
 require('dotenv').config();
 
-const data = ethers.utils.defaultAbiCoder.decode(
-  ["string", "int"], "0x0000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000f5792d4f00000000000000000000000000000000000000000000000000000000000000003a36303364636537383434663336623233623863336639306166626134306161313838653766316433663665386163643164353434656431646139000000000000");
-
 const consumerAddress = process.env.CHAINLINK_CONSUMER_ADDRESS; // REPLACE this with your Functions consumer address
-const subscriptionId = 2394; // your Chain-Link functions subscription ID
+const subscriptionId = process.env.CHAINLINK_SUBSCRIPTION_ID; // your Chain-Link functions subscription ID
 
 const makeOracleRequest = async () => {
   const routerAddress = process.env.CHAINLINK_FUNCTIONS_ROUTER;
   const linkTokenAddress = process.env.CHAINLINK_TOKEN_ADDRESS;
-  const cardanoContractAddress = process.env.CARDANO_CONTRACT_ADDRESS;
-  const donId = "fun-ethereum-sepolia-1";
+  const contractAddress = process.env.NFT_CONTRACT_ADDRESS;
+  const lenderAddress = process.env.CARDANO_LENDER_ADDRESS;
+  const donId = process.env.CHAINLINK_DON_ID;
   const explorerUrl = "https://sepolia.etherscan.io";
 
   // Initialize functions settings
@@ -34,12 +32,9 @@ const makeOracleRequest = async () => {
     .readFileSync(path.resolve(__dirname, "source.js"))
     .toString();
   
-  const policyId = "eef2d298b856d433d01b83b5b2a4318767845589bee6fecc890c8655";
-  const tokenId = "1"
-
-  // const args = ["1", "USD"];
-  const args = ["borrow_check", policyId, tokenId];
-  const secrets = { apiKey: process.env.BLOCKFROST_API_KEY, apiUrl: process.env.BLOCKFROST_BLOCKCHAIN_URL, contractAddress: cardanoContractAddress  };
+  const tokenId = 1;
+  const args = ["borrow_check", tokenId.toString()];
+  const secrets = { apiKey: process.env.BLOCKFROST_API_KEY  };
   const gasLimit = 300000;
 
   // Initialize ethers signer and provider to interact with the contracts onchain
@@ -47,6 +42,12 @@ const makeOracleRequest = async () => {
   if (!privateKey)
     throw new Error(
       "private key not provided - check your environment variables"
+    );
+
+  const otherPrivateKey = process.env.OTHER_PRIVATE_KEY; // fetch PRIVATE_KEY
+  if (!otherPrivateKey)
+    throw new Error(
+      "lender private key not provided - check your environment variables"
     );
 
   const rpcUrl = process.env.PROVIDER_RPC_URL; // fetch mumbai RPC URL
@@ -57,7 +58,7 @@ const makeOracleRequest = async () => {
   const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
 
   const signer = new ethers.Wallet(privateKey, provider);
-//   const signer = wallet.connect(provider); // create ethers signer for signing transactions
+  const lender = new ethers.Wallet(otherPrivateKey, provider);
 
   ///////// START SIMULATION ////////////
 
@@ -75,14 +76,13 @@ const makeOracleRequest = async () => {
   if (errorString) {
     console.log(`❌ Error during simulation: `, errorString);
   } else {
-    const returnType = ReturnType.bytes;
     const responseBytesHexstring = response.responseBytesHexstring;
     if (ethers.utils.arrayify(responseBytesHexstring).length > 0) {
-      const decodedResponse = decodeResult(
+      const decodedResponse = ethers.utils.defaultAbiCoder.decode(
+        ["string", "int", "int", "int"],
         response.responseBytesHexstring,
-        returnType
       );
-      console.log(`✅ Decoded response to ${returnType}: `, decodedResponse);
+      console.log(`✅ Decoded response: ${decodedResponse}` );
     }
   }
 
@@ -153,43 +153,31 @@ const makeOracleRequest = async () => {
 
   const donHostedSecretsVersion = parseInt(uploadResult.version); // fetch the reference of the encrypted secrets
 
-  // console.log(`Creating gist...`);
-  // const githubApiToken = process.env.GITHUB_API_TOKEN;
-  // if (!githubApiToken)
-  //   throw new Error(
-  //     "githubApiToken not provided - check your environment variables"
-  //   );
-
-  // // Create a new GitHub Gist to store the encrypted secrets
-  // const gistURL = await createGist(
-  //   githubApiToken,
-  //   JSON.stringify(encryptedSecretsObj)
-  // );
-  // console.log(`\n✅Gist created ${gistURL} . Encrypt the URLs..`);
-  // const encryptedSecretsUrls = await secretsManager.encryptSecretsUrls([
-  //   gistURL,
-  // ]);
-
   const functionsConsumer = new ethers.Contract(
     consumerAddress,
     functionsConsumerAbi,
-    signer
+    lender
   );
 
+
   // Actual transaction call
-  const transaction = await functionsConsumer.sendRequest(
-    source, // source
-    subscriptionId,
+  const transaction = await functionsConsumer.borrowToken(
+    source,
+    contractAddress,
+    tokenId,
+    lenderAddress,
+    slotIdNumber,
+    donHostedSecretsVersion
     // encryptedSecretsUrls, // Encrypted Urls where the DON can fetch the encrypted secrets
     // 0, // don hosted secrets - slot ID - empty in this example
     // 0, // don hosted secrets - version - empty in this example
-    "0x", // user hosted secrets - encryptedSecretsUrls - empty in this example
-    slotIdNumber, // slot ID of the encrypted secrets
-    donHostedSecretsVersion, // version of the encrypted secrets
-    args, // args
-    [], // bytesArgs - arguments can be encoded off-chain to bytes.
-    gasLimit,
-    ethers.utils.formatBytes32String(donId) // jobId is bytes32 representation of donId
+    // "0x", // user hosted secrets - encryptedSecretsUrls - empty in this example
+    // slotIdNumber, // slot ID of the encrypted secrets
+    // donHostedSecretsVersion, // version of the encrypted secrets
+    // args, // args
+    // [], // bytesArgs - arguments can be encoded off-chain to bytes.
+    // gasLimit,
+    // ethers.utils.formatBytes32String(donId) // jobId is bytes32 representation of donId
   );
 
   // Log transaction details
@@ -261,7 +249,7 @@ const makeOracleRequest = async () => {
           );
           console.log(
             `\n✅ Response to `, ethers.utils.defaultAbiCoder.decode(
-              ["string", "int"],
+              ["string", "int", "int", "int"],
             decodedResponse)
           );
 

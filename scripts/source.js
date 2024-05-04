@@ -4,62 +4,21 @@ const { decode } = await import("https://deno.land/x/cbor@v1.5.9/decode.js");
 const { encodeHex } = await import("https://deno.land/std@0.224.0/encoding/hex.ts");
 const ethers = await import("npm:ethers@6.10.0");
 
-// const { Data } = await import("https://deno.land/x/lucid@0.10.7/mod.ts")
-
-// const DatumMetadataSchema = Data.Object({
-//     beneficiary: Data.Bytes(),
-//     status: Data.Bytes(),
-//     metadata: Data.Object({
-//         data: Data.Any(),
-//         version: Data.Integer(),
-//         extra: Data.Nullable(Data.Any())
-//     }),
-// });
-
-// const replacer = (_, value) => {
-//     return typeof value == "bigint" ? Number(value.toString()) :
-//         value instanceof Map ? mapToObj(value) : value;
-// }
-
-// const mapToObj = m => {
-//     return Array.from(m).reduce((obj, [key, value]) => {
-//         obj[key] = replacer(key, value);
-//         return obj;
-//     }, {});
-// }
+const policyId = "eef2d298b856d433d01b83b5b2a4318767845589bee6fecc890c8655";
+const contractAddress = "addr_test1wrt2zjjdqfaulpcmnv6gwzavpaajjgsxfklk3zmjnx3y30qz42a4w";
+const url = "https://cardano-preview.blockfrost.io/api/v0";
 
 // Arguments can be provided when a request is initated on-chain and used in the request source code as shown below
-
 const apiKey = secrets.apiKey;
 if (!apiKey) {
   throw Error(
-    "BLOCKFROST_API_KEY secret variable not set for Blockfrost API.  Get a free key from https://blockfrost.io"
-  );
-}
-
-const url = secrets.apiUrl;
-if (!url) {
-  throw Error(
-    "BLOCKFROST_BLOCKCHAIN_URL secret variable not set for Blockfrost API. Check blockchain supported from https://blockfrost.io"
-  );
-}
-
-const contractAddress = secrets.contractAddress;
-if (!contractAddress) {
-  throw Error(
-    "CARDANO_CONTRACT_ADDRESS variable not set for Blockfrost API"
+    `BLOCKFROST_API_KEY secret variable not set for Blockfrost API.  Get a free key from ${url}`
   );
 }
 
 // make sure arguments are provided
 if (!args || args.length === 0) throw new Error("input not provided");
-let [requestType, policyId, tokenId] = args;
-
-if (!policyId || !tokenId) {
-  throw Error(
-    "POLICY or TOKEN variable not set for Blockfrost API"
-  );
-}
+const [requestType, tokenId] = args;
 
 const token = policyId + encodeHex(`Lendex#${tokenId}`);
 console.log(`TOKEN: ${token} ok??`);
@@ -153,13 +112,13 @@ async function borrowCheck(token) {
   }
 
   const data = await getTokenData(txs[0]);
-  const [lender, borrower, debt] = data;
+  const [lender, borrower, debt, _, [fee_n, fee_d]] = data;
   console.log(`Api Response: ${[lender, borrower, debt]}}`);
 
   // ABI encoding
   const encoded = ethers.AbiCoder.defaultAbiCoder().encode(
-    ["string", "int"],
-    [lender, debt]
+    ["string", "int", "int", "int"],
+    [borrower, debt, fee_n, fee_d]
   );
 
   // return the encoded data as Uint8Array
@@ -183,7 +142,7 @@ async function payDebtCheck() {
     // ABI encoding
     const encoded = ethers.AbiCoder.defaultAbiCoder().encode(
       ["string", "int"],
-      [borrower, debt]
+      [lender, debt]
     );
   
     // return the encoded data as Uint8Array
@@ -200,6 +159,3 @@ switch (requestType) {
       "INVALID_REQUEST_TYPE, valid values are: 'borrow_check', 'pay_debt_check', 'lender_claim_check', 'borrower_claim_check'"
     );
 }
-
-
-
