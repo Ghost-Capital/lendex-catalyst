@@ -161,7 +161,7 @@ const makeOracleRequest = async () => {
 
 
   // Actual transaction call
-  const transaction = await functionsConsumer.borrowToken(
+  const transaction = await functionsConsumer.payTokenDebt(
     source,
     contractAddress,
     tokenId,

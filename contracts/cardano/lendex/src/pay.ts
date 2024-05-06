@@ -43,22 +43,23 @@ console.log('Script Address:', lockAddress);
 
 const utxo = utxos[0];
 
-const fee = 1/2
-
-const amount = BigInt(Math.ceil(1_000_000 + (1_000_000 * fee)));
-const tokenName = 'Lendex#1';
+const amount = process.env.amount ? BigInt(process.env.amount) : BigInt(Math.ceil(1_000_000 + (1_000_000 * 1/2)));
+const tokenId = process.env.tokenId ? Number(process.env.tokenId) : 1; 
+const tokenName = `Lendex#${tokenId}`;
 const assetName = `${policyId}${fromText(tokenName)}`;
 
 const minter: RedeemerData = "Pay";
 const redeemer = Data.to(minter, RedeemerData);
 
-
+const _txHash = process.env.txHash; 
+const lovelace = Number(process.env.amount);
+const datum = process.env.datum; // "d8799f581c3dce7844f36b23b8c3f90afba40aa188e7f1d3f6e8acd1d544ed1da9581c3afa0ec5eb5349b65248e1700844c01c0698355d2a1f1917dcfc977b1a000f42401b0000018f345e9b8bd8799f0102ffff"
 const tokenUtxo: UTxO = {
     address: lockAddress,
-    txHash: "c20f28e0ce141e9c6b98a8dd872c67d5da0b5e6039df91ecde2ffc6e9299ca56",
+    txHash: _txHash,
     outputIndex: 0,
-    assets: { lovelace: BigInt(1443850), [assetName]: BigInt(1) },
-    datum: "d8799f581c3dce7844f36b23b8c3f90afba40aa188e7f1d3f6e8acd1d544ed1da9581c3afa0ec5eb5349b65248e1700844c01c0698355d2a1f1917dcfc977b1a000f42401b0000018f345e9b8bd8799f0102ffff"
+    assets: { lovelace: BigInt(lovelace), [assetName]: BigInt(1) },
+    datum: datum
 }
 
 

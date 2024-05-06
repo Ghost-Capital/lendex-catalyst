@@ -51,8 +51,6 @@ async function main() {
   // Calculate the keccak256 hash
   const hash = ethers.utils.keccak256(encodedSource);
 
-  console.log(hash);
-
   // If your contract requires constructor args, you can specify them here
   // address router, 
   // string memory source, 
@@ -69,6 +67,7 @@ async function main() {
     // }
   );
 
+  console.log('Chainlink source hash:', hash);
   console.log('Contract address:', (contract.target || contract.address));
   console.log('Contract tx:', contract.deployTransaction);
 }

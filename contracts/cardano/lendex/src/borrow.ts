@@ -41,8 +41,9 @@ console.log('Script Address:', lockAddress);
 
 const utxo = utxos[0];
 
-const lovelace = 1_000_000;
-const tokenName = 'Lendex#1';
+const lovelace = process.env.amount ? Number(process.env.amount) : 1_000_000;
+const tokenId = process.env.tokenId ? Number(process.env.tokenId) : 1;  
+const tokenName = `Lendex#${tokenId}`;
 const assetName = `${policyId}${fromText(tokenName)}`;
 
 // const mintRedeemer = Data.to(new Constr(0, [msg]));
