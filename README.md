@@ -213,7 +213,6 @@ curl --location 'https://cardano-preview.blockfrost.io/api/v0/txs/e8999b77791de2
 
 Here is an example:
 ```shell
-```shell
 txHash=e8999b77791de23a83f07ee193f1111acdbccf25b41a5a7ec8fd91f0e807973e amount=1435230 datum=d8799f581c3dce7844f36b23b8c3f90afba40aa188e7f1d3f6e8acd1d544ed1da9581c3afa0ec5eb5349b65248e1700844c01c0698355d2a1f1917dcfc977b1a000f42401b0000018f3470311fd8799f0102ffff node contracts/cardano/lendex/src/pay.ts
 ```
 
