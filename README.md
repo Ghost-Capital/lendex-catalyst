@@ -65,8 +65,8 @@ CHAINLINK_DON_ID="fun-ethereum-sepolia-1"
 CHAINLINK_SOURCE_HASH="0xdfb48d5110e0aef68f9254bf6cb639929002a0866165913d8cc0e24df4859a3e"
 CARDANO_BORROWER_ADDRESS="..." # Cardano address payment credential hash
 CARDANO_LENDER_ADDRESS="..." # Cardano address payment credential hash
-CARDANO_POLICY_ID="eef2d298b856d433d01b83b5b2a4318767845589bee6fecc890c8655" # don't need to touch it unless you change the Cardano SCs
-CARDANO_CONTRACT_ADDRESS="addr_test1wrt2zjjdqfaulpcmnv6gwzavpaajjgsxfklk3zmjnx3y30qz42a4w" # don't need to touch it unless you change the Cardano SCs
+CARDANO_POLICY_ID="..." # don't need to touch it unless you change the Cardano SCs
+CARDANO_CONTRACT_ADDRESS="..." # don't need to touch it unless you change the Cardano SCs
 CONTRACT_ADDRESS="..." # Lendex EVM Contract
 NFT_CONTRACT_ADDRESS="..." # DUMMY EVM NFT Contract
 ```
