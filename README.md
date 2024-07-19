@@ -58,7 +58,7 @@ BLOCKFROST_API_KEY="..."
 BLOCKFROST_BLOCKCHAIN_URL="https://cardano-preview.blockfrost.io/api/v0"
 CHAINLINK_FUNCTIONS_ROUTER="0xb83E47C2bC239B3bf370bc41e1459A34b41238D0" # Sepolia testnet
 CHAINLINK_TOKEN_ADDRESS="0x779877A7B0D9E8603169DdbD7836e478b4624789" # Sepolia testnet
-CHAINLINK_CONSUMER_ADDRESS="..."
+CHAINLINK_CONSUMER_ADDRESS="..." # Lendex EVM Contract
 CHAINLINK_ENCRYPTED_SECRETS_UPLOAD_ENDPOINTS=["https://01.functions-gateway.testnet.chain.link/", "https://02.functions-gateway.testnet.chain.link/"]
 CHAINLINK_SUBSCRIPTION_ID=...
 CHAINLINK_DON_ID="fun-ethereum-sepolia-1"
@@ -77,7 +77,14 @@ NFT_CONTRACT_ADDRESS="..." # DUMMY EVM NFT Contract
 
 `BLOCKFROST_BLOCKCHAIN_URL` and `BLOCKFROST_API_KEY` are exactly the same as the credential explained above but for Cardano preview testnet.
 
-All variables starting with `CHAINLINK_` are refereing to data necessary to interact with Chainlink Oracle. You'll need to create a Chainlink subscription and a consumer function (this will allow Lendex contract to call the oracle). Information no provided (filled with `...`) must change according to your setup like: `CHAINLINK_CONSUMER_ADDRESS`, `CHAINLINK_SUBSCRIPTION_ID`.
+### Chainlink Oracle
+The first step to setup chainlink functions is to create a [subscription](https://functions.chain.link/sepolia/new). Once the subscription is created you need to add funds to it (LINK) in order to be able to call the function. Finally you'll add the EVM Lendex Contract address as a consumer allowing it to make requests on behalf of the subscription. You can learn more about Chainlink Functions [here](https://docs.chain.link/chainlink-functions).
+
+All variables starting with `CHAINLINK_` are refereing to data necessary to interact with Chainlink Oracle. You'll need to create a Chainlink subscription and add a consumer function (Lendex contract address) allowing Lendex contract to call the oracle). Information no provided (filled with `...`) must change according to your setup like: `CHAINLINK_CONSUMER_ADDRESS`, `CHAINLINK_SUBSCRIPTION_ID`.
+
+Here is an example of how it looks like once everything is setup:
+<img width="1359" alt="Screen Shot 2024-07-19 at 11 18 20 AM" src="https://github.com/user-attachments/assets/a48f0b87-51dd-4377-bfca-0bf3ec62abf4">
+
 
 Same way all variables starting with `CARDANO_` are corresponding to Cardano data. `CARDANO_BORROWER_ADDRESS` and `CARDANO_LENDER_ADDRESS` are the Cardano accounts for both Lender and Borrower user. You can add Preview testnet funds using this [link](https://docs.cardano.org/cardano-testnets/tools/faucet/) (make sure `Preview Testnet` is selected). `CARDANO_POLICY_ID` and `CARDANO_CONTRACT_ADDRESS` correspond to the minting smart contract hash and spending smart contract address respectively.
 
