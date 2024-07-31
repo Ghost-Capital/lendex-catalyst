@@ -273,6 +273,75 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
         }
     }
 
+    /**
+     * @notice Chainlink oracle request callback 
+     * @param requestId The request ID, returned by _sendRequest()
+     * @param response Aggregated response from the user code
+     * @param err Aggregated error from the user code or from the execution pipeline
+     * Either response or error parameter will be set, but never both
+     */
+    function fulfillRequest(
+        bytes32 requestId,
+        bytes memory response,
+        bytes memory err
+    ) internal override {
+        OracleRequest memory request = oracleRequests[requestId];
+        if (request._type == OracleRequestType.UNKNOWN) {
+            revert UnexpectedRequestID(requestId);  
+        }
+        else {
+            if (request._type == OracleRequestType.BORROW_CHECK) {
+                (string memory borrower, int loan, int fee_n, int fee_d) = abi.decode(
+                    response,
+                    (string, int, int, int)
+                );
+                console.log("Cardano response borrower: %o", borrower);
+                console.log("Cardano response loan: %o", uint256(loan));
+
+                
+                address _contract = request._contract;
+                uint256 tokenId = request.tokenId;
+
+                address owner = owners[_contract][tokenId];
+                Info memory info = tokens[owner][_contract][tokenId];
+
+                if (stringEquals(info.borrowerAddr, borrower) && info.amount == loan && info.fee.n == fee_n && info.fee.d == fee_d) {
+                    states[_contract][tokenId] = State.WAITING_PAYMENT;
+                    tokens[owner][_contract][tokenId].lender = request.lender;
+                    tokens[owner][_contract][tokenId].lenderAddr = request.lenderAddr;
+                    emit Response(requestId, response, err);
+                }
+                delete oracleRequests[requestId];
+            }
+            else if (request._type == OracleRequestType.PAY_DEBT_CHECK) {
+                (string memory lender, int debt) = abi.decode(
+                    response,
+                    (string, int)
+                );
+                console.log("Cardano response lender: %o", lender);
+                console.log("Cardano response debt: %o", uint256(debt));
+
+                address _contract = request._contract;
+                uint256 tokenId = request.tokenId;
+
+                address owner = owners[_contract][tokenId];
+                Info memory info = tokens[owner][_contract][tokenId];
+
+                if (stringEquals(info.lenderAddr, lender) && info.amount == debt) {
+                    states[_contract][tokenId] = State.DEBT_PAID;
+                    emit Response(requestId, response, err);
+                }
+                delete oracleRequests[requestId];
+            }
+            else {
+                delete oracleRequests[requestId];
+                revert UnexpectedRequestID(requestId);  
+            }
+        }
+       
+    }
+
+
     function _deleteToken(address _contract, uint256 tokenId) internal {
         address owner = owners[_contract][tokenId];
         delete owners[_contract][tokenId];
@@ -450,73 +519,5 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
 
     function stringToAddress(string memory _address) public pure returns (address) {
         return address(bytes20(bytes32(uint256(keccak256(abi.encodePacked(_address))))));
-    }
-
-    /**
-     * @notice Chainlink oracle request callback 
-     * @param requestId The request ID, returned by _sendRequest()
-     * @param response Aggregated response from the user code
-     * @param err Aggregated error from the user code or from the execution pipeline
-     * Either response or error parameter will be set, but never both
-     */
-    function fulfillRequest(
-        bytes32 requestId,
-        bytes memory response,
-        bytes memory err
-    ) internal override {
-        OracleRequest memory request = oracleRequests[requestId];
-        if (request._type == OracleRequestType.UNKNOWN) {
-            revert UnexpectedRequestID(requestId);  
-        }
-        else {
-            if (request._type == OracleRequestType.BORROW_CHECK) {
-                (string memory borrower, int loan, int fee_n, int fee_d) = abi.decode(
-                    response,
-                    (string, int, int, int)
-                );
-                console.log("Cardano response borrower: %o", borrower);
-                console.log("Cardano response loan: %o", uint256(loan));
-
-                
-                address _contract = request._contract;
-                uint256 tokenId = request.tokenId;
-
-                address owner = owners[_contract][tokenId];
-                Info memory info = tokens[owner][_contract][tokenId];
-
-                if (stringEquals(info.borrowerAddr, borrower) && info.amount == loan && info.fee.n == fee_n && info.fee.d == fee_d) {
-                    states[_contract][tokenId] = State.WAITING_PAYMENT;
-                    tokens[owner][_contract][tokenId].lender = request.lender;
-                    tokens[owner][_contract][tokenId].lenderAddr = request.lenderAddr;
-                    emit Response(requestId, response, err);
-                }
-                delete oracleRequests[requestId];
-            }
-            else if (request._type == OracleRequestType.PAY_DEBT_CHECK) {
-                (string memory lender, int debt) = abi.decode(
-                    response,
-                    (string, int)
-                );
-                console.log("Cardano response lender: %o", lender);
-                console.log("Cardano response debt: %o", uint256(debt));
-
-                address _contract = request._contract;
-                uint256 tokenId = request.tokenId;
-
-                address owner = owners[_contract][tokenId];
-                Info memory info = tokens[owner][_contract][tokenId];
-
-                if (stringEquals(info.lenderAddr, lender) && debt == 0) {
-                    states[_contract][tokenId] = State.DEBT_PAID;
-                    emit Response(requestId, response, err);
-                }
-                delete oracleRequests[requestId];
-            }
-            else {
-                delete oracleRequests[requestId];
-                revert UnexpectedRequestID(requestId);  
-            }
-        }
-       
     }
 }
