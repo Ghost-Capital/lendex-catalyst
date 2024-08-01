@@ -1,0 +1,56 @@
+-- ENUMS
+CREATE TYPE blockchain AS ENUM ('cdn', 'eth', 'sol');
+CREATE TYPE loan AS ENUM ('tokenLocked', 'borrowMinted', 'awaitingClaim', 'awaitingPay', 'defaulted');
+
+-- USER TABLE
+CREATE TABLE launch_user (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(256),
+    nonce TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX name_idx ON launch_user(name);
+
+-- BLOCKCHAIN USER TABLE
+CREATE TABLE launch_blockchain_user (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES launch_user(id) ON DELETE CASCADE,
+    blockchain blockchain NOT NULL,
+    wallet_address TEXT NOT NULL UNIQUE,
+    unique_address TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX user_id_idx ON launch_blockchain_user(user_id);
+CREATE INDEX unique_identifier_idx ON launch_blockchain_user(unique_address);
+CREATE INDEX wallet_address_idx ON launch_blockchain_user(wallet_address);
+
+-- LOAN TABLE
+CREATE TABLE launch_loan (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES launch_user(id) ON DELETE CASCADE,
+    asset_id TEXT NOT NULL,
+    contract_address TEXT NOT NULL,
+    amount BIGINT NOT NULL,
+    duration BIGINT NOT NULL,
+    apr NUMERIC(5, 2) NOT NULL,
+    creator_address TEXT NOT NULL REFERENCES launch_blockchain_user(wallet_address) ON DELETE CASCADE,
+    ethereum_lender_address TEXT REFERENCES launch_blockchain_user(wallet_address),
+    cardano_borrower_address TEXT NOT NULL,
+    cardano_lender_address TEXT,
+    state loan NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    cardano_datum TEXT,
+    cardano_tx_hash TEXT,
+    payback_amount BIGINT,
+    cardano_asset_name TEXT
+);
+CREATE INDEX loan_user_id_idx ON launch_loan(user_id);
+CREATE INDEX loan_asset_id_idx ON launch_loan(asset_id);
+CREATE INDEX loan_contract_address_idx ON launch_loan(contract_address);
+CREATE INDEX loan_creator_address_idx ON launch_loan(creator_address);
+CREATE INDEX loan_ethereum_lender_address_idx ON launch_loan(ethereum_lender_address);
