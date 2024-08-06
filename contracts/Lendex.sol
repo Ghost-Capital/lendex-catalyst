@@ -22,7 +22,7 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
 
     error UnexpectedRequestID(bytes32 requestId);
 
-    event Response(bytes32 indexed requestId, bytes response, bytes err);
+    event FulfillResponse(bytes32 indexed requestId, OracleRequestType _type, bytes response, bytes err);
 
     /**
      * @notice current state of each token
@@ -309,7 +309,7 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
                     states[_contract][tokenId] = State.WAITING_PAYMENT;
                     tokens[owner][_contract][tokenId].lender = request.lender;
                     tokens[owner][_contract][tokenId].lenderAddr = request.lenderAddr;
-                    emit Response(requestId, response, err);
+                    emit FulfillResponse(requestId, request._type, response, err);
                 }
                 delete oracleRequests[requestId];
             }
@@ -329,7 +329,7 @@ contract Lendex is IERC721Receiver, FunctionsClient, ConfirmedOwner {
 
                 if (stringEquals(info.lenderAddr, lender) && info.amount == debt) {
                     states[_contract][tokenId] = State.DEBT_PAID;
-                    emit Response(requestId, response, err);
+                    emit FulfillResponse(requestId, request._type, response, err);
                 }
                 delete oracleRequests[requestId];
             }
