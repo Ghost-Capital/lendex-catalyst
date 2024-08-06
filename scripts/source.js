@@ -6,7 +6,6 @@ const ethers = await import("npm:ethers@6.10.0");
 
 const policyId = "eef2d298b856d433d01b83b5b2a4318767845589bee6fecc890c8655";
 const contractAddress = "addr_test1wrt2zjjdqfaulpcmnv6gwzavpaajjgsxfklk3zmjnx3y30qz42a4w";
-const url = "https://cardano-preview.blockfrost.io/api/v0";
 
 // Arguments can be provided when a request is initated on-chain and used in the request source code as shown below
 const apiKey = secrets.apiKey;
@@ -18,8 +17,9 @@ if (!apiKey) {
 
 // make sure arguments are provided
 if (!args || args.length === 0) throw new Error("input not provided");
-const [requestType, tokenId] = args;
+const [requestType, tokenId, _url] = args;
 
+const url = _url || "https://cardano-preprod.blockfrost.io/api/v0";
 const token = policyId + encodeHex(`Lendex#${tokenId}`);
 console.log(`TOKEN: ${token} ok??`);
 
@@ -111,6 +111,12 @@ async function borrowCheck(token) {
     throw new Error(`Missing token: ${token}`);
   }
 
+  // get burned tx
+  const burnTxs = tokenHistory.filter(tx => tx.action == "burned" && Number(tx.amount) == -1);
+  if (burnTxs.length != 0) {
+    throw new Error(`Existing burn token tx: ${token}`);
+  }
+
   const data = await getTokenData(txs[0]);
   const [lender, borrower, debt, _, [fee_n, fee_d]] = data;
   console.log(`Api Response: ${[lender, borrower, debt]}}`);
@@ -134,8 +140,13 @@ async function payDebtCheck() {
     if (txs.length == 0) {
       throw new Error(`Missing token: ${token}`);
     }
+
+    const txMint = tokenHistory.filter(tx => tx.action == "minted" && Number(tx.amount) == 1);
+    if (txMint.length != 1) {
+      throw new Error(`Only allow one mint token tx: ${token}`);
+    }
   
-    const data = await getTokenData(txs[0]);
+    const data = await getTokenData(txMint[0]);
     const [lender, borrower, debt] = data;
     console.log(`Api Response: ${[lender, borrower, debt]}}`);
   
